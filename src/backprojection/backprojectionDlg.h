@@ -2,6 +2,9 @@
 //
 
 #include <util/common/gui/SimulationDialog.h>
+#include <util/common/gui/PlotControl.h>
+
+#include "model.h"
 
 #pragma once
 
@@ -27,4 +30,11 @@ protected:
     afx_msg void OnPaint();
     afx_msg HCURSOR OnQueryDragIcon();
     DECLARE_MESSAGE_MAP()
+public:
+    CPlotControl m_srcCtrl;
+    CPlotControl m_prjCtrl;
+    CPlotControl m_dstCtrl;
+    model::model_data m_data;
+    afx_msg void OnBnClickedButton1();
+    afx_msg void OnBnClickedButton2();
 };
