@@ -1,0 +1,19 @@
+version: '{build}'
+
+image:
+  - Visual Studio 2013
+  
+environment:
+  project_name: backprojection
+
+configuration:
+  - Release
+
+install:
+  - git submodule update --init --recursive
+
+build:
+  project: src\%project_name%\%project_name%.sln
+
+artifacts:
+  - path: 'src\%project_name%\%CONFIGURATION%\%project_name%.exe'
