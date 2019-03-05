@@ -4,7 +4,11 @@ Part of [d8euAI8sMs](https://github.com/d8euAI8sMs) namespace. See [`learning` r
 
 ## About
 
-2D image reconstruction from a number of 1D projections using Filtered Back Projection method.
+2D image reconstruction from a number of 1D projections using
+
+* Filtered Back Projection method
+* Kaczmarz method
+* Max Entropy method
 
 ## Status and Artifacts
 

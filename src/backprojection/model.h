@@ -3,6 +3,7 @@
 #include <afxwin.h>
 
 #include <vector>
+#include <cstdint>
 
 #include <util/common/math/complex.h>
 #include <util/common/plot/plot.h>
@@ -26,7 +27,7 @@ namespace model
     struct parameters
     {
         // system params
-        double snr;
+        double snr, eps;
         size_t n;
     };
 
@@ -36,6 +37,7 @@ namespace model
         {
             // system params
             1.0,
+            1e-3,
             100,
         };
         return p;
@@ -161,10 +163,16 @@ namespace model
 
     class backprojection
     {
+    public:
+        using sparse_matrix_t = std::vector < std::vector < size_t > > ;
+        using vector_t = std::vector < double > ;
     private:
         const parameters & p;
         std::vector < math::complex < > > Q, P;
         size_t w, h, S, C;
+        sparse_matrix_t A; // A.x = r, A = A[#eq, #var] = {0 or 1}
+        vector_t r; // r = r[#eq]
+        size_t An;
     public:
         backprojection(const parameters & p)
             : p(p)
@@ -187,6 +195,11 @@ namespace model
             C = clp2(S);
 
             dst.reshape(C, p.n);
+            A.clear();
+            A.resize(p.n * S);
+            r.clear();
+            r.resize(p.n * S);
+            An = 0;
 
             geom::point < int > p1, p2;
 
@@ -197,11 +210,21 @@ namespace model
             {
                 int s = (int) i - (int) S / 2;
                 make_line(w, h, s, M_PI / p.n * t, p1, p2);
+                size_t vars = 0;
                 math::bresenham_rasterize(p1, p2, [&] (const geom::point < int > & p) {
                     dst.data[i][t] += src.data[p.y][p.x];
+                    A[An].push_back(p.y * w + p.x);
+                    r[An] += src.data[p.y][p.x];
+                    ++vars;
                 });
+                // add equation if it is not trivial (at least 2 variables)
+                if (vars >= 2) ++An;
+                else { A[An].clear(); r[An] = 0; }
                 imax = max(imax, dst.data[i][t]);
             }
+
+            A.resize(An);
+            r.resize(An);
 
             for (size_t t = 0; t < p.n; ++t)
             for (size_t i = 0; i < S; ++i)
@@ -250,6 +273,7 @@ namespace model
             dst.reshape(h, w);
 
             double imax = 0;
+            double imin = (std::numeric_limits < double > :: max)();
 
             // calculate back projection using
             // simplest integration method
@@ -262,13 +286,77 @@ namespace model
                 if (s < 0 || s >= S) continue;
                 dst.data[i][j] += prj.data[s][t];
                 imax = max(imax, dst.data[i][j]);
+                imin = min(imin, dst.data[i][j]);
             }
 
             for (size_t i = 0; i < h; ++i)
             for (size_t j = 0; j < w; ++j)
             {
-                dst.data[i][j] /= imax;
+                dst.data[i][j] = (dst.data[i][j] - imin) / (imax - imin);
             }
+        }
+        bool kaczmarz_next(vector_t & x)
+        {
+            _kaczmarz_init(x);
+            vector_t x0 = x;
+            for (size_t i = 0; i < 10; ++i) _kaczmarz_next(x);
+            return _kaczmarz_check(x, x0);
+        }
+        void kaczmarz_get(const vector_t & x, bitmap & dst)
+        {
+            dst.reshape(h, w);
+
+            double imax = 0;
+            double imin = (std::numeric_limits < double > :: max)();
+
+            for (size_t i = 0; i < w * h; ++i) { imax = max(imax, x[i]); imin = min(imin, x[i]); }
+
+            for (size_t i = 0; i < h; ++i)
+            for (size_t j = 0; j < w; ++j)
+            {
+                dst.data[i][j] = (x[i * w + j] - imin) / (imax - imin);
+            }
+        }
+    private:
+        void _kaczmarz_init(vector_t & x)
+        {
+            if (!x.empty()) return;
+            x.resize(w * h);
+            x[0] = 0.5;
+        }
+        void _kaczmarz_next(vector_t & x)
+        {
+            double s1, s2, t;
+            for (size_t i = 0; i < An; ++i)
+            {
+                s1 = s2 = 0;
+		        for (size_t k = 0; k < A[i].size(); ++k)
+		        {
+                    size_t j = A[i][k];
+			        double v = 1;
+			        s1 += v * x[j];
+			        s2 += v * v;
+		        }
+		        t = (r[i] - s1) / s2;
+                for (size_t k = 0; k < A[i].size(); ++k)
+		        {
+                    size_t j = A[i][k];
+			        double v = 1;
+                    x[j] += v * t;
+		        }
+            }
+        }
+        bool _kaczmarz_check(const vector_t & x, const vector_t & x0)
+        {
+            double s1 = 0, s2 = 0;
+
+            for (int i = 0; i < (int)x.size(); ++i)
+            {
+                s1 += (x[i] - x0[i]) * (x[i] - x0[i]);
+                s2 += x[i] * x[i];
+            }
+
+            return s1 <= p.eps * s2;
         }
     };
 

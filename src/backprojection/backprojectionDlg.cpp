@@ -14,6 +14,7 @@
 
 CBackProjectionDlg::CBackProjectionDlg(CWnd* pParent /*=NULL*/)
     : CSimulationDialog(CBackProjectionDlg::IDD, pParent)
+    , m_nAlgo(algo_backproj)
 {
     m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
     m_data.params = model::make_default_parameters();
@@ -28,6 +29,8 @@ void CBackProjectionDlg::DoDataExchange(CDataExchange* pDX)
     DDX_Control(pDX, IDC_SRC3, m_prjCtrl);
     DDX_Text(pDX, IDC_EDIT1, m_data.params.n);
     DDX_Text(pDX, IDC_EDIT2, m_data.params.snr);
+    DDX_Text(pDX, IDC_EDIT3, m_data.params.eps);
+    DDX_Radio(pDX, IDC_RADIO1, m_nAlgo);
 }
 
 BEGIN_MESSAGE_MAP(CBackProjectionDlg, CSimulationDialog)
@@ -152,7 +155,22 @@ void CBackProjectionDlg::OnBnClickedButton2()
     bp.project(m_data.noised, m_data.projection);
     m_data.projection.to_cbitmap(m_data.cprojection, 1, false);
     m_prjCtrl.RedrawWindow();
-    bp.backproject(m_data.projection, m_data.recovered);
+    if (m_nAlgo == algo_kaczmarz)
+    {
+        model::backprojection::vector_t x;
+        bool stop = false;
+        while (!stop)
+        {
+            stop = bp.kaczmarz_next(x);
+            bp.kaczmarz_get(x, m_data.recovered);
+            m_data.recovered.to_cbitmap(m_data.crecovered, 1, false);
+            m_dstCtrl.RedrawWindow();
+        }
+    }
+    else if (m_nAlgo == algo_backproj)
+    {
+        bp.backproject(m_data.projection, m_data.recovered);
+    }
     m_data.recovered.to_cbitmap(m_data.crecovered, 1, false);
     m_dstCtrl.RedrawWindow();
 }
