@@ -3,6 +3,7 @@
 #include <afxwin.h>
 
 #include <vector>
+#include <map>
 #include <cstdint>
 
 #include <util/common/math/complex.h>
@@ -14,6 +15,9 @@
 
 #ifndef M_PI
 #define M_PI 3.1415926535897932384626433832795
+#endif // !M_PI
+#ifndef M_E
+#define M_E 2.7182818284590452353602874713527
 #endif // !M_PI
 
 
@@ -164,6 +168,8 @@ namespace model
     class backprojection
     {
     public:
+        using bit_t = std::uint8_t;
+        using matrix_t = std::vector < std::vector < bit_t > > ;
         using sparse_matrix_t = std::vector < std::vector < size_t > > ;
         using vector_t = std::vector < double > ;
     private:
@@ -171,6 +177,8 @@ namespace model
         std::vector < math::complex < > > Q, P;
         size_t w, h, S, C;
         sparse_matrix_t A; // A.x = r, A = A[#eq, #var] = {0 or 1}
+        matrix_t A2; // non sparse version of A for maxentropy
+        bool hasA2; // A2 exists
         vector_t r; // r = r[#eq]
         size_t An;
     public:
@@ -187,8 +195,9 @@ namespace model
         {
             return (x < 0) ? -1 : (x > 0) ? 1 : 0;
         }
-        void project(const bitmap & src, bitmap & dst)
+        void project(const bitmap & src, bitmap & dst, bool sparse = true)
         {
+            hasA2 = !sparse;
             w = src.w;
             h = src.h;
             S = std::hypot(src.w, src.h);
@@ -200,6 +209,13 @@ namespace model
             r.clear();
             r.resize(p.n * S);
             An = 0;
+
+            if (hasA2)
+            {
+                A2.clear();
+                A2.resize(p.n * S);
+                for (size_t i = 0; i < p.n * S; ++i) A2[i].resize(w * h);
+            }
 
             geom::point < int > p1, p2;
 
@@ -214,16 +230,18 @@ namespace model
                 math::bresenham_rasterize(p1, p2, [&] (const geom::point < int > & p) {
                     dst.data[i][t] += src.data[p.y][p.x];
                     A[An].push_back(p.y * w + p.x);
+                    if (hasA2) A2[An][p.y * w + p.x] = 1;
                     r[An] += src.data[p.y][p.x];
                     ++vars;
                 });
                 // add equation if it is not trivial (at least 2 variables)
                 if (vars >= 2) ++An;
-                else { A[An].clear(); r[An] = 0; }
+                else { A[An].clear(); r[An] = 0; if (hasA2) { A2[An].clear(); A2[An].resize(w * h); } }
                 imax = max(imax, dst.data[i][t]);
             }
 
             A.resize(An);
+            if (hasA2) A2.resize(An);
             r.resize(An);
 
             for (size_t t = 0; t < p.n; ++t)
@@ -317,6 +335,48 @@ namespace model
                 dst.data[i][j] = (x[i * w + j] - imin) / (imax - imin);
             }
         }
+        bool maxentropy_next(vector_t & x)
+        {
+            _maxentropy_init(x);
+            vector_t x0 = x;
+            for (size_t i = 0; i < 10; ++i) _maxentropy_next(x);
+            return _maxentropy_check(x, x0);
+        }
+        void maxentropy_get(const vector_t & x, bitmap & dst)
+        {
+            dst.reshape(h, w);
+
+            double imax = 0;
+            double imin = (std::numeric_limits < double > :: max)();
+            
+            for (size_t i = 0; i < h; ++i)
+            for (size_t j = 0; j < w; ++j)
+            {
+                dst.data[i][j] = 1 / M_E;
+                for (size_t k = 0; k < An; ++k)
+                {
+                    bool found;
+                    if (hasA2)
+                    {
+                        found = (A2[k][i * w + j] == 1);
+                    }
+                    else
+                    {
+                        if (A[k][0] < A[k][1]) found = std::binary_search(A[k].begin(), A[k].end(), i * w + j, std::less < size_t > ());
+                        else                   found = std::binary_search(A[k].begin(), A[k].end(), i * w + j, std::greater < size_t > ());
+                    }
+                    dst.data[i][j] *= (found ? x[k] : 1);
+                }
+                imax = max(imax, dst.data[i][j]);
+                imin = min(imin, dst.data[i][j]);
+            }
+
+            for (size_t i = 0; i < h; ++i)
+            for (size_t j = 0; j < w; ++j)
+            {
+                dst.data[i][j] = (dst.data[i][j] - imin) / (imax - imin);
+            }
+        }
     private:
         void _kaczmarz_init(vector_t & x)
         {
@@ -356,6 +416,52 @@ namespace model
                 s2 += x[i] * x[i];
             }
 
+            return s1 <= p.eps * s2;
+        }
+        void _maxentropy_init(vector_t & x)
+        {
+            if (!x.empty()) return;
+            x.resize(An);
+            for (size_t i = 0; i < An; ++i) x[i] = rand() / (RAND_MAX + 1.0);
+        }
+        void _maxentropy_next(vector_t & x)
+        {
+            for (size_t k = 0; k < An; ++k)
+            {
+                double zk = 0;
+                for (size_t j = 0; j < A[k].size(); ++j)
+                {
+                    double p = 1;
+                    for (size_t i = 0; i < An; ++i)
+                    {
+                        if (i == k) continue;
+                        bool found;
+                        if (hasA2)
+                        {
+                            found = (A2[i][A[k][j]] == 1);
+                        }
+                        else
+                        {
+                            if (A[i][0] < A[i][1]) found = std::binary_search(A[i].begin(), A[i].end(), A[k][j], std::less < size_t > ());
+                            else                   found = std::binary_search(A[i].begin(), A[i].end(), A[k][j], std::greater < size_t > ());
+                        }
+                        p *= (found ? x[i] : 1);
+                    }
+                    zk += p;
+                }
+                x[k] = r[k] * M_E / zk;
+            }
+        }
+        bool _maxentropy_check(const vector_t & x, const vector_t & x0)
+        {
+            double s1 = 0, s2 = 0;
+            
+            for (int i = 0; i < (int)x.size(); ++i)
+            {
+                s1 += (x[i] - x0[i]) * (x[i] - x0[i]);
+                s2 += x[i] * x[i];
+            }
+            
             return s1 <= p.eps * s2;
         }
     };

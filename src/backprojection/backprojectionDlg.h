@@ -39,4 +39,5 @@ public:
     afx_msg void OnBnClickedButton2();
     enum { algo_backproj = 0, algo_kaczmarz, algo_maxentropy };
     int m_nAlgo;
+    BOOL m_bPreferSparse;
 };
