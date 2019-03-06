@@ -317,7 +317,7 @@ namespace model
         {
             _kaczmarz_init(x);
             vector_t x0 = x;
-            for (size_t i = 0; i < 10; ++i) _kaczmarz_next(x);
+            _kaczmarz_next(x);
             return _kaczmarz_check(x, x0);
         }
         void kaczmarz_get(const vector_t & x, bitmap & dst)
@@ -339,7 +339,7 @@ namespace model
         {
             _maxentropy_init(x);
             vector_t x0 = x;
-            for (size_t i = 0; i < 10; ++i) _maxentropy_next(x);
+            _maxentropy_next(x);
             return _maxentropy_check(x, x0);
         }
         void maxentropy_get(const vector_t & x, bitmap & dst)
