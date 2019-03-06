@@ -168,7 +168,7 @@ namespace model
     class backprojection
     {
     public:
-        using bit_t = std::uint8_t;
+        using bit_t = bool;
         using matrix_t = std::vector < std::vector < bit_t > > ;
         using sparse_matrix_t = std::vector < std::vector < size_t > > ;
         using vector_t = std::vector < double > ;
@@ -358,7 +358,7 @@ namespace model
                     bool found;
                     if (hasA2)
                     {
-                        found = (A2[k][i * w + j] == 1);
+                        found = A2[k][i * w + j];
                     }
                     else
                     {
@@ -438,7 +438,7 @@ namespace model
                         bool found;
                         if (hasA2)
                         {
-                            found = (A2[i][A[k][j]] == 1);
+                            found = A2[i][A[k][j]];
                         }
                         else
                         {
