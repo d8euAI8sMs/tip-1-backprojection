@@ -28,6 +28,7 @@ void CBackProjectionDlg::DoDataExchange(CDataExchange* pDX)
     DDX_Control(pDX, IDC_SRC, m_srcCtrl);
     DDX_Control(pDX, IDC_SRC2, m_dstCtrl);
     DDX_Control(pDX, IDC_SRC3, m_prjCtrl);
+    DDX_Control(pDX, IDC_INDICATOR, m_bWorkIndicator);
     DDX_Text(pDX, IDC_EDIT1, m_data.params.n);
     DDX_Text(pDX, IDC_EDIT2, m_data.params.snr);
     DDX_Text(pDX, IDC_EDIT3, m_data.params.eps);
@@ -123,6 +124,14 @@ void CBackProjectionDlg::OnBnClickedButton2()
 {
     UpdateData(TRUE);
 
+    StopSimulationThread();
+    StartSimulationThread();
+}
+
+void CBackProjectionDlg::OnSimulation()
+{
+    Invoke([this] () { m_bWorkIndicator.SetWindowText(_T("o")); });
+
     m_data.noised = m_data.source;
 
     double m = 0, e = 0, en = 0;
@@ -161,7 +170,7 @@ void CBackProjectionDlg::OnBnClickedButton2()
     {
         model::backprojection::vector_t x;
         bool stop = false;
-        while (!stop)
+        while (!stop && m_bWorking)
         {
             stop = bp.kaczmarz_next(x);
             bp.kaczmarz_get(x, m_data.recovered);
@@ -177,7 +186,7 @@ void CBackProjectionDlg::OnBnClickedButton2()
     {
         model::backprojection::vector_t x;
         bool stop = false;
-        while (!stop)
+        while (!stop && m_bWorking)
         {
             stop = bp.maxentropy_next(x);
             bp.maxentropy_get(x, m_data.recovered);
@@ -187,4 +196,6 @@ void CBackProjectionDlg::OnBnClickedButton2()
     }
     m_data.recovered.to_cbitmap(m_data.crecovered, 1, false);
     m_dstCtrl.RedrawWindow();
+
+    Invoke([this] () { m_bWorkIndicator.SetWindowText(_T("")); });
 }

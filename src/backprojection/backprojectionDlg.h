@@ -34,10 +34,12 @@ public:
     CPlotControl m_srcCtrl;
     CPlotControl m_prjCtrl;
     CPlotControl m_dstCtrl;
+    CStatic m_bWorkIndicator;
     model::model_data m_data;
     afx_msg void OnBnClickedButton1();
     afx_msg void OnBnClickedButton2();
     enum { algo_backproj = 0, algo_kaczmarz, algo_maxentropy };
     int m_nAlgo;
     BOOL m_bPreferSparse;
+    void OnSimulation() override;
 };
